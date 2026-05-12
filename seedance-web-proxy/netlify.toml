@@ -1,0 +1,6 @@
+[build]
+  publish = "public"
+  functions = "netlify/functions"
+
+# Observação: não coloque SEEDANCE_API_KEY aqui.
+# Configure secrets no painel do Netlify em Site settings -> Environment variables (scope: Functions).
