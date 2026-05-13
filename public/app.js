@@ -199,7 +199,7 @@ async function seedanceGenerate(scene) {
     images: [scene.imageUrl],
     model: scene.model
   };
-  const res = await fetch('/.netlify/functions/seedance-generate', {
+  const res = await fetch('/generate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
@@ -210,7 +210,7 @@ async function seedanceGenerate(scene) {
 }
 
 async function seedanceStatus(taskId) {
-  const url = new URL('/.netlify/functions/seedance-status', window.location.origin);
+  const url = new URL('/status', window.location.origin);
   url.searchParams.set('task_id', taskId);
   const res = await fetch(url.toString());
   const data = await res.json();
