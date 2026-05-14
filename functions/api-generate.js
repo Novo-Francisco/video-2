@@ -10,15 +10,6 @@ headers: { "Content-Type": "application/json" }
 }
 );
 }
-if (context.request.method !== "POST") {
-return new Response(
-JSON.stringify({ error: "Use POST com JSON. Não abra /generate direto no navegador." }),
-{
-status: 405,
-headers: { "Content-Type": "application/json" }
-}
-);
-}
 let requestBody;
 try {
 requestBody = await context.request.json();
