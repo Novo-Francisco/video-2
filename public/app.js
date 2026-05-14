@@ -40,7 +40,7 @@ subtitles: true
 function buildPrompt(s) {
 const parts = [];
 if (s.dialogue && s.dialogue.trim()) {
-parts.push(Generate a video with voiceover. ${s.voiceDirection || "A natural voice"} says: "${s.dialogue.trim()}".);
+parts.push("Generate a video with voiceover. " + (s.voiceDirection || "A natural voice") + ' says: "' + s.dialogue.trim() + '".');
 }
 if (s.subtitles && s.dialogue && s.dialogue.trim()) {
 parts.push("Subtitles appear at the bottom matching the dialogue.");
