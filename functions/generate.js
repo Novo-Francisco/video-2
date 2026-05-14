@@ -1,53 +1,50 @@
-export async function onRequest(context) {
-const apiKey = context.env.SEEDANCE_API_KEY;
-const baseUrl = context.env.SEEDANCE_API_BASE_URL;
-if (!apiKey || !baseUrl) {
-return new Response(
-JSON.stringify({ error: "Variáveis não configuradas" }),
-{
-status: 500,
-headers: { "Content-Type": "application/json" }
-}
-);
-}
-let requestBody;
-try {
-requestBody = await context.request.json();
-} catch (err) {
-return new Response(
-JSON.stringify({ error: "JSON inválido ou body vazio" }),
-{
-status: 400,
-headers: { "Content-Type": "application/json" }
-}
-);
-}
-try {
-const response = await fetch(baseUrl + "/generate", {
-method: "POST",
-headers: {
-"Authorization": "Bearer " + apiKey,
-"Content-Type": "application/json"
-},
-body: JSON.stringify(requestBody)
-});
-const data = await response.text();
+```js
+export async function onRequestPost(context) {
+  const token = context.env.REPLICATE_API_TOKEN;
 
-return new Response(data, {
-  status: response.status,
-  headers: { "Content-Type": "application/json" }
-});
+  if (!token) {
+    return new Response(
+      JSON.stringify({ error: "Token da Replicate não configurado" }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
+  }
 
-} catch (err) {
-return new Response(
-JSON.stringify({
-error: "Erro ao gerar",
-detail: String(err)
-}),
-{
-status: 500,
-headers: { "Content-Type": "application/json" }
-}
-);
-}
+  let body;
+  try {
+    body = await context.request.json();
+  } catch {
+    return new Response(
+      JSON.stringify({ error: "JSON inválido" }),
+      { status: 400, headers: { "Content-Type": "application/json" } }
+    );
+  }
+
+  const prompt = body.prompt;
+  if (!prompt) {
+    return new Response(
+      JSON.stringify({ error: "Prompt vazio" }),
+      { status: 400, headers: { "Content-Type": "application/json" } }
+    );
+  }
+
+  const response = await fetch("https://api.replicate.com/v1/predictions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      version: "3f0457e4615f6d87c94c4d4b6e90eb1c4a9dbb6e3a9e5f8cbb7e7f9f0c6c8c1d", 
+      input: {
+        prompt: prompt
+      }
+    })
+  });
+
+  const data = await response.json();
+
+  return new Response(JSON.stringify(data), {
+    status: response.status,
+    headers: { "Content-Type": "application/json" }
+  });
 }
