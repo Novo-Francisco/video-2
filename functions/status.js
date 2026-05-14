@@ -1,4 +1,4 @@
-xport async function onRequest(context) {
+export async function onRequest(context) {
 const apiKey = context.env.SEEDANCE_API_KEY;
 const baseUrl = context.env.SEEDANCE_API_BASE_URL;
 if (!apiKey || !baseUrl) {
