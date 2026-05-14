@@ -20,7 +20,7 @@ btnRender.addEventListener("click", async function () {
 setError("");
 setLog("Chamando /generate...");
 try {
-const res = await fetch("/api/generate", {
+const res = await fetch("/generate", {
 method: "POST",
 headers: {
 "Content-Type": "application/json"
