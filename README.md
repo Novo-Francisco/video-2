@@ -1,4 +1,4 @@
-# Seedance Web + Proxy (Windows 7 friendly)
+# Seedance Web + Proxy (Windows 7 friendly).
 
 Este projeto foi feito para você usar no **Windows 7** com **vscode.dev**: o site é estático (HTML/JS) e roda no navegador.
 
