@@ -10,17 +10,36 @@ headers: { "Content-Type": "application/json" }
 }
 );
 }
+if (context.request.method !== "POST") {
+return new Response(
+JSON.stringify({ error: "Use POST com JSON. Não abra /generate direto no navegador." }),
+{
+status: 405,
+headers: { "Content-Type": "application/json" }
+}
+);
+}
+let requestBody;
 try {
-const requestBody = await context.request.json();
+requestBody = await context.request.json();
+} catch (err) {
+return new Response(
+JSON.stringify({ error: "JSON inválido ou body vazio" }),
+{
+status: 400,
+headers: { "Content-Type": "application/json" }
+}
+);
+}
+try {
 const response = await fetch(baseUrl + "/generate", {
-  method: "POST",
-  headers: {
-    "Authorization": "Bearer " + apiKey,
-    "Content-Type": "application/json"
-  },
-  body: JSON.stringify(requestBody)
+method: "POST",
+headers: {
+"Authorization": "Bearer " + apiKey,
+"Content-Type": "application/json"
+},
+body: JSON.stringify(requestBody)
 });
-
 const data = await response.text();
 
 return new Response(data, {
