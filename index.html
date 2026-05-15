@@ -1,21 +1,23 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>Teste</title>
-</head>
+<script>
+  document.getElementById("btn").addEventListener("click", async function () {
+    try {
+      alert("Enviando requisição...");
 
-<body>
-  <h1>Funcionando ✅</h1>
+      const res = await fetch("/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ prompt: "teste" })
+      });
 
-  <input id="prompt" placeholder="Digite algo aqui">
-  <button id="btn">Gerar</button>
+      alert("Status: " + res.status);
 
-  <script>
-    document.getElementById("btn").addEventListener("click", function () {
-      alert("Botão clicado ✅");
-    });
-  </script>
+      const text = await res.text();
+      alert(text);
 
-</body>
-</html>
+    } catch (err) {
+      alert("Erro: " + err);
+    }
+  });
+</script>
