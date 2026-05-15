@@ -1,57 +1,26 @@
-<!doctype html>
-<html lang="pt-BR">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Seedance – Roteiro por Cenas (Web + Proxy)</title>
-  <link rel="stylesheet" href="styles.css" />
-</head>
+<!DOCTYPE html>
+<html>
 <body>
-  <div class="container">
-    <div class="row" style="gap:14px">
-      <div class="card">
-        <div class="h1">Gerador por cenas (Seedance 2.0) – 100% online no seu PC</div>
-        <div class="p">Este app roda no navegador. Para manter sua chave segura, ele chama uma <b>Function</b> (proxy) no Netlify/Cloudflare em vez de chamar a API direto do browser.</div>
-        <div class="hr"></div>
-        <div class="row3">
-          <div class="card" style="padding:14px">
-            <div class="label">Total</div>
-            <div style="font-size:18px;font-weight:800"><span id="total" class="good">0s</span> <span class="small">/ 180s</span></div>
-            <div class="label">Ação</div>
-            <button id="btnRender" class="btn btnPrimary">Gerar cenas + montar vídeo final</button>
-            <div id="err" class="p bad" style="display:none"></div>
-          </div>
-          <div class="card" style="padding:14px">
-            <div class="label">Status</div>
-            <div class="progress" id="log">Pronto.</div>
-          </div>
-          <div class="card" style="padding:14px">
-            <div class="label">Cenas</div>
-            <button id="btnAdd" class="btn btnGhost">+ Nova cena</button>
-            <div class="label">Resultado</div>
-            <a id="download" class="btn btnPrimary" style="display:none;text-decoration:none" download="final.mp4">Baixar vídeo final</a>
-            <div class="small" style="margin-top:8px">Obs.: o vídeo final é montado no navegador (pode consumir memória).</div>
-          </div>
-        </div>
-      </div>
+  <h1>Funcionando ✅</h1>
 
-      <div class="card">
-        <div class="sceneHeader">
-          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-            <span class="pill">Browser</span>
-            <span class="pill">Proxy seguro (Function)</span>
-            <span class="pill">Áudio nativo</span>
-            <span class="pill">Concat local (WASM)</span>
-          </div>
-        </div>
-        <div class="hr"></div>
-        <div id="scenes" class="list"></div>
-      </div>
-    </div>
-  </div>
+  <input id="prompt">
+  <button onclick="gerar()">Gerar</button>
 
-  <!-- FFmpeg WASM (carrega via CDN). Você pode trocar por outro CDN se preferir. -->
-  <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.6/dist/ffmpeg.min.js"></script>
-  <script src="app.js"></script>
+  <script>
+    async function gerar() {
+      const prompt = document.getElementById("prompt").value;
+
+      const res = await fetch("/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ prompt })
+      });
+
+      const data = await res.json();
+      alert(JSON.stringify(data));
+    }
+  </script>
 </body>
 </html>
