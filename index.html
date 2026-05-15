@@ -1,25 +1,40 @@
-<script>
-  document.getElementById("btn").addEventListener("click", function () {
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Teste</title>
+</head>
 
-    alert("Clique detectado ✅");
+<body>
+  <h1>Funcionando ✅</h1>
 
-    fetch("/generate", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ prompt: "teste" })
-    })
-    .then(function (res) {
-      alert("Status: " + res.status);
-      return res.text();
-    })
-    .then(function (text) {
-      alert(text);
-    })
-    .catch(function (err) {
-      alert("Erro: " + err);
-    });
+  <button id="btn">Gerar</button>
 
-  });
-</script>
+  <script>
+    document.getElementById("btn").onclick = function () {
+      alert("1 - botão clicado");
+
+      fetch("/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ prompt: "teste" })
+      })
+      .then(function (res) {
+        alert("2 - status " + res.status);
+        return res.text();
+      })
+      .then(function (txt) {
+        alert("3 - resposta recebida");
+        alert(txt);
+      })
+      .catch(function (erro) {
+        alert("4 - erro:");
+        alert(erro);
+      });
+    };
+  </script>
+
+</body>
+</html>
