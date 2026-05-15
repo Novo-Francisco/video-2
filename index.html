@@ -1,23 +1,25 @@
 <script>
-  document.getElementById("btn").addEventListener("click", async function () {
-    try {
-      alert("Enviando requisição...");
+  document.getElementById("btn").addEventListener("click", function () {
 
-      const res = await fetch("/generate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ prompt: "teste" })
-      });
+    alert("Clique detectado ✅");
 
+    fetch("/generate", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ prompt: "teste" })
+    })
+    .then(function (res) {
       alert("Status: " + res.status);
-
-      const text = await res.text();
+      return res.text();
+    })
+    .then(function (text) {
       alert(text);
-
-    } catch (err) {
+    })
+    .catch(function (err) {
       alert("Erro: " + err);
-    }
+    });
+
   });
 </script>
