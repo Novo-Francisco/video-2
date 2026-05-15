@@ -1,26 +1,5 @@
-<!DOCTYPE html>
-<html>
-<body>
-  <h1>Funcionando ✅</h1>
-
-  <input id="prompt">
-  <button onclick="gerar()">Gerar</button>
-
-  <script>
-    async function gerar() {
-      const prompt = document.getElementById("prompt").value;
-
-      const res = await fetch("/generate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ prompt })
-      });
-
-      const data = await res.json();
-      alert(JSON.stringify(data));
-    }
-  </script>
-</body>
-</html>
+<script>
+  function gerar() {
+    alert("Clique funcionou ✅");
+  }
+</script>
