@@ -2,17 +2,21 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <title>Gerador de Vídeos (Replicate + Cloudflare)</title>
+  <title>Gerador de Vídeo com Fotos (IA)</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
-  <h1>Gerador de Vídeos com IA</h1>
+  <h1>Gerador de Vídeo com Fotos</h1>
 
-  <textarea id="prompt" placeholder="Descreva o vídeo que deseja gerar..."></textarea>
+  <p>Envie várias fotos para criar um vídeo animado.</p>
+
+  <input type="file" id="images" multiple accept="image/*">
+
   <button id="generate">Gerar Vídeo</button>
 
   <div id="status"></div>
+
   <video id="result" controls></video>
 
   <script src="app.js"></script>
