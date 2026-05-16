@@ -2,7 +2,12 @@ export async function onRequestPost(context) {
   const { REPLICATE_API_TOKEN } = context.env;
 
   const formData = await context.request.formData();
+  const prompt = formData.get("prompt");
   const images = formData.getAll("images");
+
+  if (!prompt) {
+    return Response.json({ error: "Prompt não enviado." }, { status: 400 });
+  }
 
   if (!images.length) {
     return Response.json({ error: "Nenhuma imagem enviada." }, { status: 400 });
@@ -21,8 +26,9 @@ export async function onRequestPost(context) {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        version: "zsxkib/img-to-video:latest",
+        version: "zsxkib/img-to-video:latest", // ajuste para o modelo que você usar
         input: {
+          prompt: prompt,
           image: `data:${file.type};base64,${base64}`,
           duration: 5
         }
