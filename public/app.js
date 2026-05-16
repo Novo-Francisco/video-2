@@ -1,54 +1,44 @@
-const btnRender = document.getElementById("btnRender");
-const btnAdd = document.getElementById("btnAdd");
-const logEl = document.getElementById("log");
-const errEl = document.getElementById("err");
-function setLog(msg) {
-if (logEl) {
-logEl.textContent = msg;
-}
-}
-function setError(msg) {
-if (errEl) {
-errEl.style.display = msg ? "block" : "none";
-errEl.textContent = msg || "";
-}
-}
-btnAdd.addEventListener("click", function () {
-alert("Botão Add funcionando ✅");
-});
-btnRender.addEventListener("click", async function () {
-setError("");
-setLog("Chamando /generate...");
-try {
-const res = await fetch("/generate", {
-method: "POST",
-headers: {
-"Content-Type": "application/json"
-},
-body: JSON.stringify({
-prompt: "teste simples",
-duration: 5,
-aspect_ratio: "9:16",
-images: ["https://example.com/teste.jpg"],
-model: "seedance-2.0"
-})
-});
-const text = await res.text();
+const promptInput = document.getElementById("prompt");
+const generateBtn = document.getElementById("generate");
+const statusDiv = document.getElementById("status");
+const resultVideo = document.getElementById("result");
 
-console.log("STATUS:", res.status);
-console.log("BODY:", text);
+generateBtn.onclick = async () => {
+  statusDiv.innerText = "Criando partes do vídeo...";
 
-setLog("Resposta recebida. Veja o console.");
+  const response = await fetch("/generate", {
+    method: "POST",
+    body: JSON.stringify({ prompt: promptInput.value })
+  });
 
-if (!res.ok) {
-  setError("Erro da Function/API: " + text);
-  return;
+  const { jobs } = await response.json();
+
+  pollStatus(jobs);
+};
+
+async function pollStatus(jobs) {
+  const interval = setInterval(async () => {
+    const response = await fetch("/status", {
+      method: "POST",
+      body: JSON.stringify({ jobs })
+    });
+
+    const data = await response.json();
+
+    statusDiv.innerText = "Processando partes...";
+
+    if (data.done) {
+      clearInterval(interval);
+      statusDiv.innerText = "Juntando vídeo final...";
+
+      const merge = await fetch("/merge", {
+        method: "POST",
+        body: JSON.stringify({ urls: data.outputs })
+      });
+
+      const blob = await merge.blob();
+      resultVideo.src = URL.createObjectURL(blob);
+      statusDiv.innerText = "Vídeo final pronto!";
+    }
+  }, 3000);
 }
-
-alert("Chamada para /generate funcionou ✅");
-
-} catch (e) {
-console.error(e);
-setError("Erro ao chamar /generate: " + String(e));
-}
-});
