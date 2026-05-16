@@ -1,30 +1,30 @@
-export async function onRequest(context) {
-const apiKey = context.env.SEEDANCE_API_KEY;
-const baseUrl = context.env.SEEDANCE_API_BASE_URL;
-if (!apiKey || !baseUrl) {
-return new Response(
-JSON.stringify({ error: "Variáveis não configuradas" }),
-{ status: 500, headers: { "Content-Type": "application/json" } }
-);
-}
-try {
-const response = await fetch(baseUrl + "/status", {
-method: "GET",
-headers: {
-"Authorization": "Bearer " + apiKey
-}
-});
-const data = await response.text();
+export async function onRequestPost(context) {
+  const { REPLICATE_API_TOKEN } = context.env;
+  const body = await context.request.json();
+  const jobs = body.jobs;
 
-return new Response(data, {
-  status: response.status,
-  headers: { "Content-Type": "application/json" }
-});
+  let outputs = [];
+  let allDone = true;
 
-} catch (err) {
-return new Response(
-JSON.stringify({ error: String(err) }),
-{ status: 500 }
-);
-}
+  for (let id of jobs) {
+    const response = await fetch(`https://api.replicate.com/v1/predictions/${id}`, {
+      headers: {
+        "Authorization": `Token ${REPLICATE_API_TOKEN}`,
+        "Content-Type": "application/json"
+      }
+    });
+
+    const prediction = await response.json();
+
+    if (prediction.status !== "succeeded") {
+      allDone = false;
+    } else {
+      outputs.push(prediction.output[0]);
+    }
+  }
+
+  return Response.json({
+    done: allDone,
+    outputs
+  });
 }
