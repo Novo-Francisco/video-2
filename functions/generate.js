@@ -1,15 +1,19 @@
 export async function onRequestPost(context) {
   const { REPLICATE_API_TOKEN } = context.env;
-  const body = await context.request.json();
-  const prompt = body.prompt;
 
-  const PART_DURATION = 10; // segundos
-  const TOTAL_DURATION = 180; // 3 minutos
-  const PARTS = TOTAL_DURATION / PART_DURATION;
+  const formData = await context.request.formData();
+  const images = formData.getAll("images");
+
+  if (!images.length) {
+    return Response.json({ error: "Nenhuma imagem enviada." }, { status: 400 });
+  }
 
   let jobs = [];
 
-  for (let i = 0; i < PARTS; i++) {
+  for (let file of images) {
+    const arrayBuffer = await file.arrayBuffer();
+    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+
     const response = await fetch("https://api.replicate.com/v1/predictions", {
       method: "POST",
       headers: {
@@ -17,10 +21,10 @@ export async function onRequestPost(context) {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        version: "your-model-version-id-here",
+        version: "zsxkib/img-to-video:latest",
         input: {
-          prompt: prompt,
-          duration: PART_DURATION
+          image: `data:${file.type};base64,${base64}`,
+          duration: 5
         }
       })
     });
