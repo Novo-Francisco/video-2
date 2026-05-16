@@ -1,30 +1,23 @@
-import { ffmpeg } from "@ffmpeg/ffmpeg";
-
 export async function onRequestPost(context) {
+  const { REPLICATE_API_TOKEN } = context.env;
   const body = await context.request.json();
   const urls = body.urls;
 
-  await ffmpeg.load();
-
-  let index = 0;
-  let list = "";
-
-  for (let url of urls) {
-    const file = await fetch(url).then(r => r.arrayBuffer());
-    const name = `part${index}.mp4`;
-
-    ffmpeg.FS("writeFile", name, new Uint8Array(file));
-    list += `file '${name}'\n`;
-    index++;
-  }
-
-  ffmpeg.FS("writeFile", "list.txt", new TextEncoder().encode(list));
-
-  await ffmpeg.run("-f", "concat", "-safe", "0", "-i", "list.txt", "-c", "copy", "output.mp4");
-
-  const data = ffmpeg.FS("readFile", "output.mp4");
-
-  return new Response(data, {
-    headers: { "Content-Type": "video/mp4" }
+  const response = await fetch("https://api.replicate.com/v1/predictions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Token ${REPLICATE_API_TOKEN}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      version: "zsxkib/ffmpeg-concat:latest",
+      input: {
+        videos: urls,
+        transition: "none"
+      }
+    })
   });
+
+  const prediction = await response.json();
+  return Response.json(prediction);
 }
