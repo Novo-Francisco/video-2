@@ -1,19 +1,28 @@
+const promptInput = document.getElementById("prompt");
 const fileInput = document.getElementById("images");
 const generateBtn = document.getElementById("generate");
 const statusDiv = document.getElementById("status");
 const resultVideo = document.getElementById("result");
 
 generateBtn.onclick = async () => {
-  statusDiv.innerText = "Enviando fotos...";
+  statusDiv.innerText = "Enviando texto e fotos...";
   resultVideo.src = "";
 
   const files = fileInput.files;
+  const prompt = promptInput.value.trim();
+
+  if (!prompt) {
+    statusDiv.innerText = "Digite um texto para o vídeo.";
+    return;
+  }
+
   if (!files.length) {
     statusDiv.innerText = "Selecione pelo menos uma foto.";
     return;
   }
 
   const formData = new FormData();
+  formData.append("prompt", prompt);
   for (let file of files) {
     formData.append("images", file);
   }
@@ -25,7 +34,7 @@ generateBtn.onclick = async () => {
 
   const { jobs } = await response.json();
 
-  statusDiv.innerText = "Gerando vídeos das fotos...";
+  statusDiv.innerText = "Gerando vídeos das cenas...";
   pollParts(jobs);
 };
 
