@@ -1,25 +1,34 @@
-const promptInput = document.getElementById("prompt");
+const fileInput = document.getElementById("images");
 const generateBtn = document.getElementById("generate");
 const statusDiv = document.getElementById("status");
 const resultVideo = document.getElementById("result");
 
 generateBtn.onclick = async () => {
-  statusDiv.innerText = "Criando partes do vídeo...";
+  statusDiv.innerText = "Enviando fotos...";
   resultVideo.src = "";
 
-  // 1) Envia o prompt para gerar várias partes
+  const files = fileInput.files;
+  if (!files.length) {
+    statusDiv.innerText = "Selecione pelo menos uma foto.";
+    return;
+  }
+
+  const formData = new FormData();
+  for (let file of files) {
+    formData.append("images", file);
+  }
+
   const response = await fetch("/generate", {
     method: "POST",
-    body: JSON.stringify({ prompt: promptInput.value })
+    body: formData
   });
 
   const { jobs } = await response.json();
 
-  statusDiv.innerText = "Processando partes...";
+  statusDiv.innerText = "Gerando vídeos das fotos...";
   pollParts(jobs);
 };
 
-// 2) Polling das partes individuais
 async function pollParts(jobs) {
   const interval = setInterval(async () => {
     const response = await fetch("/status", {
@@ -30,7 +39,7 @@ async function pollParts(jobs) {
     const data = await response.json();
 
     if (!data.done) {
-      statusDiv.innerText = "Gerando partes do vídeo...";
+      statusDiv.innerText = "Processando cenas...";
       return;
     }
 
@@ -38,7 +47,6 @@ async function pollParts(jobs) {
 
     statusDiv.innerText = "Juntando vídeo final...";
 
-    // 3) Envia as partes para o merge
     const merge = await fetch("/merge", {
       method: "POST",
       body: JSON.stringify({ urls: data.outputs })
@@ -46,18 +54,15 @@ async function pollParts(jobs) {
 
     const mergeJob = await merge.json();
 
-    // 4) Polling do merge
     pollMerge(mergeJob.id);
   }, 3000);
 }
 
-// 5) Polling do job de merge na Replicate
 async function pollMerge(id) {
   const interval = setInterval(async () => {
     const response = await fetch(`https://api.replicate.com/v1/predictions/${id}`, {
       headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Token " + (window.REPLICATE_API_TOKEN || "")
+        "Content-Type": "application/json"
       }
     });
 
@@ -77,4 +82,3 @@ async function pollMerge(id) {
     }
   }, 3000);
 }
-
