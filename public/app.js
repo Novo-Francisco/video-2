@@ -1,3 +1,4 @@
+const MERGE_BACKEND_URL = "https://SEU_BACKEND_AQUI.com/merge";
 // public/app.js — Cloudflare Pages Functions + Replicate
 // Rotas conforme sua estrutura: functions/generate.js -> /generate, functions/status.js -> /status
 const ENDPOINTS = {
@@ -241,6 +242,8 @@ btnEl.addEventListener("click", async () => {
               .filter(Boolean);
 
             setStatus(`✅ Pronto! Reproduzindo cenas em sequência...`);
+            const downloadBtn = document.getElementById("downloadFinal");
+            downloadBtn.disabled = false;
             playSequence(outputs);
           }
         } else {
@@ -267,5 +270,52 @@ btnEl.addEventListener("click", async () => {
     stopPolling();
     disableUI(false);
     setStatus(`<div style="color:#b00020;">${escapeHtml(e.message)}</div>`);
+  }
+});
+const downloadBtn = document.getElementById("downloadFinal");
+
+downloadBtn.addEventListener("click", async () => {
+  if (!currentOutputs || !currentOutputs.length) {
+    alert("Nenhum vídeo pronto ainda.");
+    return;
+  }
+
+  downloadBtn.disabled = true;
+  downloadBtn.textContent = "⏳ Montando MP4 final...";
+
+  try {
+    const resp = await fetch(MERGE_BACKEND_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        outputs: currentOutputs,
+        filename: "video_final.mp4"
+      })
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `Erro no merge (HTTP ${resp.status})`);
+    }
+
+    // Recebe o MP4 final e dispara download
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "video_final.mp4"; // padrão do HTML download [3](https://github.com/Backblaze-B2-Samples/multithreaded-downloader-js)[4](https://dev.to/c_jordi_666570f401c202c50/dont-make-users-click-100-times-how-to-package-and-download-multiple-files-in-javascript-2ben)
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    URL.revokeObjectURL(url);
+
+    downloadBtn.textContent = "⬇️ Baixar MP4 final";
+    downloadBtn.disabled = false;
+  } catch (e) {
+    alert(`Falhou: ${e.message}`);
+    downloadBtn.textContent = "⬇️ Baixar MP4 final";
+    downloadBtn.disabled = false;
   }
 });
