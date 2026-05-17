@@ -1,10 +1,9 @@
-const MERGE_BACKEND_URL = "https://SEU_BACKEND_AQUI.com/merge";
-// public/app.js — Cloudflare Pages Functions + Replicate
 // Rotas conforme sua estrutura: functions/generate.js -> /generate, functions/status.js -> /status
 const ENDPOINTS = {
-  generate: "/generate",
-  status: "/status",
-  merge: "/merge" // opcional (não é usado por padrão)
+  BASE_URL = "https://video-2-production.up.railway.app",
+  GENERATE_URL = BASE_URL + "/generate",
+  STATUS_URL = BASE_URL + "/status",
+  MERGE_BACKEND_URL = BASE_URL + "/merge" // opcional (não é usado por padrão)
 };
 
 const POLL_INTERVAL_MS = 3000;     // checar status a cada 3s
@@ -37,11 +36,11 @@ function disableUI(disabled) {
   imagesEl.disabled = disabled;
 }
 
-async function fetchWithTimeout(url, options = {}) {
+async function fetchWithTimeout(BASE_URL, options = {}) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
   try {
-    return await fetch(url, { ...options, signal: ctrl.signal });
+    return await fetch(BASE_URL, { ...options, signal: ctrl.signal });
   } finally {
     clearTimeout(t);
   }
@@ -128,7 +127,7 @@ function playSequence(urls) {
 }
 
 async function checkStatus(jobIds) {
-  const res = await fetchWithTimeout(ENDPOINTS.status, {
+  const res = await fetchWithTimeout(ENDPOINTS.STATUS_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ jobs: jobIds })
@@ -168,7 +167,7 @@ btnEl.addEventListener("click", async () => {
     fd.append("prompt", prompt);
     for (const f of files) fd.append("images", f);
 
-    const res = await fetchWithTimeout(ENDPOINTS.generate, {
+    const res = await fetchWithTimeout(ENDPOINTS.GENERATE_URL, {
       method: "POST",
       body: fd
     });
