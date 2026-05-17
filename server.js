@@ -19,61 +19,49 @@ app.use(express.static(path.join(__dirname, "public")));
 // --- Health check ---
 app.get("/health", (req, res) => res.json({ ok: true }));
 
-// --- Multer para receber multipart/form-data (imagens do <input type=file>) ---
+// --- Multer para receber multipart/form-data ---
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 25 * 1024 * 1024 }, // 25MB por imagem
 });
 
 // ============================
-// REPLICATE: helpers
+// Replicate config
 // ============================
-function requireToken(res) {
+
+function getToken(res) {
   const token = (process.env.REPLICATE_API_TOKEN || "").trim();
   if (!token) {
-    res.status(500).json({
-      error: "REPLICATE_API_TOKEN não configurado no Railway (Variables).",
-    });
+    res.status(500).json({ error: "REPLICATE_API_TOKEN não configurado no Railway (Variables)." });
     return null;
   }
   return token;
 }
 
-/**
- * Replicate aceita "version" como identificador de versão.
- * A documentação mostra exemplos com hash (ex: 5c7d5d...) e também "replicate/hello-world:hash" em exemplos. [2](https://replicate.com/docs/topics/predictions/create-a-prediction)[3](https://sdks.replicate.com/resources/predictions/methods/create/)
- * Então deixamos configurável via ENV:
- * - REPLICATE_VERSION = "hash..."  (recomendado)
- * OU
- * - REPLICATE_VERSION = "owner/model:hash..."
- */
-function getReplicateVersion(res) {
-  const v = (process.env.REPLICATE_VERSION || "").trim();
-  if (!v) {
-    res.status(500).json({
-      error:
-        "REPLICATE_VERSION não configurado. Defina no Railway (Variables) com o ID/hash da versão do modelo (ou owner/model:hash).",
-    });
-    return null;
-  }
-  return v;
+// ✅ Seedance 2.0 (bytedance/seedance-2.0) versão/hash conhecida no Replicate: [5](https://metacpan.org/)
+const DEFAULT_SEEDANCE_VERSION =
+  "3bc3d0e67e2af136924e33fca5a827c2b3a8e09aeff8fa462bc7540ebfa2521d";
+
+function getModelVersion() {
+  // Você pode sobrescrever no Railway (Variables):
+  // REPLICATE_VERSION = <hash>
+  return (process.env.REPLICATE_VERSION || "").trim() || DEFAULT_SEEDANCE_VERSION;
 }
 
 // ============================
-// /generate: recebe prompt + várias imagens, cria um job por imagem
+// /generate: prompt + imagens -> jobs
 // ============================
 app.post("/generate", upload.array("images"), async (req, res) => {
-  const token = requireToken(res);
+  const token = getToken(res);
   if (!token) return;
-
-  const version = getReplicateVersion(res);
-  if (!version) return;
 
   const prompt = (req.body?.prompt || "").toString().trim();
   const files = req.files || [];
 
   if (!prompt) return res.status(400).json({ error: "Prompt não enviado." });
   if (!files.length) return res.status(400).json({ error: "Nenhuma imagem enviada." });
+
+  const version = getModelVersion();
 
   // Limitador simples de concorrência
   async function mapLimit(items, limit, fn) {
@@ -94,23 +82,32 @@ app.post("/generate", upload.array("images"), async (req, res) => {
     const results = await mapLimit(files, 2, async (file, idx) => {
       const base64 = Buffer.from(file.buffer).toString("base64");
 
+      // ⚠️ IMPORTANTE:
+      // O Replicate espera "version" como ID/hash da versão do modelo. [2](https://dev.to/c_jordi_666570f401c202c50/dont-make-users-click-100-times-how-to-package-and-download-multiple-files-in-javascript-2ben)[3](https://www.xjavascript.com/blog/how-can-i-let-a-user-download-multiple-files-when-a-button-is-clicked/)
+      // Seedance 2.0 aceita multimodal (texto+imagem etc.), mas os nomes exatos dos campos podem variar por modelo.
+      // Se algum campo estiver diferente, o "raw" abaixo vai te mostrar o erro exato.
+
+      const body = {
+        version,
+        input: {
+          prompt,
+          // imagem como data URI
+          image: `data:${file.mimetype};base64,${base64}`,
+          // duração padrão 5s (você pode mudar depois)
+          duration: 5,
+        },
+      };
+
       const response = await fetch("https://api.replicate.com/v1/predictions", {
         method: "POST",
         headers: {
-          // Replicate HTTP API: Authorization deve ser Bearer <token>. [1](https://replicate.com/docs/reference/http)
+          // Replicate documenta Bearer token no header Authorization. [1](https://docs.rs/replicate-client/latest/replicate_client/models/prediction/enum.PredictionStatus.html)
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
-          // Sync mode: segura até ~60s, senão volta starting/processing e seguimos com polling. [2](https://replicate.com/docs/topics/predictions/create-a-prediction)
+          // Sync mode: tenta esperar até ~60s, senão volta starting/processing. [2](https://dev.to/c_jordi_666570f401c202c50/dont-make-users-click-100-times-how-to-package-and-download-multiple-files-in-javascript-2ben)
           Prefer: "wait",
         },
-        body: JSON.stringify({
-          version,
-          input: {
-            prompt,
-            image: `data:${file.mimetype};base64,${base64}`,
-            duration: 5,
-          },
-        }),
+        body: JSON.stringify(body),
       });
 
       const prediction = await response.json().catch(() => ({}));
@@ -119,9 +116,9 @@ app.post("/generate", upload.array("images"), async (req, res) => {
         return {
           ok: false,
           scene: idx + 1,
-          status: prediction?.status || "error",
           error: prediction?.detail || prediction?.error || `HTTP ${response.status}`,
           raw: prediction,
+          sent: { version, inputKeys: Object.keys(body.input) },
         };
       }
 
@@ -130,28 +127,25 @@ app.post("/generate", upload.array("images"), async (req, res) => {
 
     const failed = results.filter((r) => !r.ok);
     if (failed.length) {
-      // ✅ Agora você enxerga o erro real de cada cena
       return res.status(502).json({
         error: "Falha ao iniciar uma ou mais cenas.",
         details: failed,
         hint:
-          "Verifique REPLICATE_API_TOKEN e principalmente REPLICATE_VERSION (hash da versão do modelo).",
+          "Se o erro mencionar 'Invalid version', configure REPLICATE_VERSION com a versão correta. Se mencionar campo inválido, ajuste os nomes dos inputs conforme a API do modelo.",
       });
     }
 
-    return res.json({
-      jobs: results.map((r) => ({ id: r.id, status: r.status })),
-    });
+    return res.json({ jobs: results.map((r) => ({ id: r.id, status: r.status })) });
   } catch (e) {
     return res.status(500).json({ error: e?.message || "Erro inesperado no /generate" });
   }
 });
 
 // ============================
-// /status: recebe { jobs: [id...] } e devolve progresso + outputs
+// /status: jobs -> progresso + outputs
 // ============================
 app.post("/status", async (req, res) => {
-  const token = requireToken(res);
+  const token = getToken(res);
   if (!token) return;
 
   const jobs = req.body?.jobs;
@@ -159,7 +153,7 @@ app.post("/status", async (req, res) => {
     return res.status(400).json({ error: "Envie JSON { jobs: ['id1','id2',...] }" });
   }
 
-  // Status do ciclo de vida: starting, processing, succeeded, failed, canceled, aborted. [4](https://www.mpegflow.com/recipes/concatenate-video-files)
+  // Status conforme lifecycle do Replicate. [4](https://www.google.com/)
   const TERMINAL = new Set(["succeeded", "failed", "canceled", "aborted"]);
 
   let allTerminal = true;
@@ -169,7 +163,7 @@ app.post("/status", async (req, res) => {
 
   for (const id of jobs) {
     const response = await fetch(`https://api.replicate.com/v1/predictions/${id}`, {
-      headers: { Authorization: `Bearer ${token}` }, // [1](https://replicate.com/docs/reference/http)
+      headers: { Authorization: `Bearer ${token}` }, // [1](https://docs.rs/replicate-client/latest/replicate_client/models/prediction/enum.PredictionStatus.html)
     });
 
     const prediction = await response.json().catch(() => ({}));
@@ -210,7 +204,7 @@ app.post("/status", async (req, res) => {
 });
 
 // ============================
-// FFmpeg merge: /merge  (MP4 final real)
+// FFmpeg merge: /merge (MP4 final real)
 // ============================
 async function downloadToFile(url, destPath, maxBytes = 250 * 1024 * 1024) {
   const r = await fetch(url);
@@ -279,8 +273,10 @@ app.post("/merge", async (req, res) => {
 
     let usedFallback = false;
     try {
+      // concat demuxer (rápido quando compatível)
       await runFFmpeg(["-y", "-f", "concat", "-safe", "0", "-i", listPath, "-c", "copy", outPath], workdir);
     } catch {
+      // fallback re-encode
       usedFallback = true;
 
       const inputArgs = [];
@@ -336,6 +332,5 @@ app.post("/merge", async (req, res) => {
   }
 });
 
-// Railway usa PORT; padrão 8080
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => console.log("Server on port", PORT));
