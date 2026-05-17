@@ -16,7 +16,7 @@ const __dirname = path.dirname(__filename);
 // --- Servir arquivos estáticos do seu site ---
 app.use(express.static(path.join(__dirname, "public")));
 
-// --- Health check (agora vai aparecer JSON, não “página em branco”) ---
+// --- Health check ---
 app.get("/health", (req, res) => res.json({ ok: true }));
 
 // --- Multer para receber multipart/form-data (imagens do <input type=file>) ---
@@ -26,30 +26,54 @@ const upload = multer({
 });
 
 // ============================
-// REPlicate: /generate e /status
+// REPLICATE: helpers
 // ============================
-function requireToken(req, res) {
-  const token = process.env.REPLICATE_API_TOKEN;
+function requireToken(res) {
+  const token = (process.env.REPLICATE_API_TOKEN || "").trim();
   if (!token) {
-    res.status(500).json({ error: "REPLICATE_API_TOKEN não configurado no Railway (Variables)." });
+    res.status(500).json({
+      error: "REPLICATE_API_TOKEN não configurado no Railway (Variables).",
+    });
     return null;
   }
   return token;
 }
 
+/**
+ * Replicate aceita "version" como identificador de versão.
+ * A documentação mostra exemplos com hash (ex: 5c7d5d...) e também "replicate/hello-world:hash" em exemplos. [2](https://replicate.com/docs/topics/predictions/create-a-prediction)[3](https://sdks.replicate.com/resources/predictions/methods/create/)
+ * Então deixamos configurável via ENV:
+ * - REPLICATE_VERSION = "hash..."  (recomendado)
+ * OU
+ * - REPLICATE_VERSION = "owner/model:hash..."
+ */
+function getReplicateVersion(res) {
+  const v = (process.env.REPLICATE_VERSION || "").trim();
+  if (!v) {
+    res.status(500).json({
+      error:
+        "REPLICATE_VERSION não configurado. Defina no Railway (Variables) com o ID/hash da versão do modelo (ou owner/model:hash).",
+    });
+    return null;
+  }
+  return v;
+}
+
+// ============================
 // /generate: recebe prompt + várias imagens, cria um job por imagem
+// ============================
 app.post("/generate", upload.array("images"), async (req, res) => {
-  const token = requireToken(req, res);
+  const token = requireToken(res);
   if (!token) return;
+
+  const version = getReplicateVersion(res);
+  if (!version) return;
 
   const prompt = (req.body?.prompt || "").toString().trim();
   const files = req.files || [];
 
   if (!prompt) return res.status(400).json({ error: "Prompt não enviado." });
   if (!files.length) return res.status(400).json({ error: "Nenhuma imagem enviada." });
-
-  // Modelo (mantenha o seu)
-  const MODEL_VERSION = "zsxkib/img-to-video:latest";
 
   // Limitador simples de concorrência
   async function mapLimit(items, limit, fn) {
@@ -67,18 +91,20 @@ app.post("/generate", upload.array("images"), async (req, res) => {
   }
 
   try {
-    const results = await mapLimit(files, 2, async (file) => {
+    const results = await mapLimit(files, 2, async (file, idx) => {
       const base64 = Buffer.from(file.buffer).toString("base64");
+
       const response = await fetch("https://api.replicate.com/v1/predictions", {
         method: "POST",
         headers: {
-          Authorization: `Token ${token}`,
+          // Replicate HTTP API: Authorization deve ser Bearer <token>. [1](https://replicate.com/docs/reference/http)
+          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
-          // Sync mode tenta esperar até ~60s; se não der, retorna starting/processing e você faz polling.
+          // Sync mode: segura até ~60s, senão volta starting/processing e seguimos com polling. [2](https://replicate.com/docs/topics/predictions/create-a-prediction)
           Prefer: "wait",
         },
         body: JSON.stringify({
-          version: MODEL_VERSION,
+          version,
           input: {
             prompt,
             image: `data:${file.mimetype};base64,${base64}`,
@@ -88,26 +114,44 @@ app.post("/generate", upload.array("images"), async (req, res) => {
       });
 
       const prediction = await response.json().catch(() => ({}));
+
       if (!response.ok) {
-        return { ok: false, error: prediction?.detail || prediction?.error || `HTTP ${response.status}`, raw: prediction };
+        return {
+          ok: false,
+          scene: idx + 1,
+          status: prediction?.status || "error",
+          error: prediction?.detail || prediction?.error || `HTTP ${response.status}`,
+          raw: prediction,
+        };
       }
-      return { ok: true, id: prediction.id, status: prediction.status };
+
+      return { ok: true, id: prediction.id, status: prediction.status, scene: idx + 1 };
     });
 
-    const failed = results.filter(r => !r.ok);
+    const failed = results.filter((r) => !r.ok);
     if (failed.length) {
-      return res.status(502).json({ error: "Falha ao iniciar uma ou mais cenas.", details: failed });
+      // ✅ Agora você enxerga o erro real de cada cena
+      return res.status(502).json({
+        error: "Falha ao iniciar uma ou mais cenas.",
+        details: failed,
+        hint:
+          "Verifique REPLICATE_API_TOKEN e principalmente REPLICATE_VERSION (hash da versão do modelo).",
+      });
     }
 
-    return res.json({ jobs: results.map(r => ({ id: r.id, status: r.status })) });
+    return res.json({
+      jobs: results.map((r) => ({ id: r.id, status: r.status })),
+    });
   } catch (e) {
     return res.status(500).json({ error: e?.message || "Erro inesperado no /generate" });
   }
 });
 
+// ============================
 // /status: recebe { jobs: [id...] } e devolve progresso + outputs
+// ============================
 app.post("/status", async (req, res) => {
-  const token = requireToken(req, res);
+  const token = requireToken(res);
   if (!token) return;
 
   const jobs = req.body?.jobs;
@@ -115,7 +159,7 @@ app.post("/status", async (req, res) => {
     return res.status(400).json({ error: "Envie JSON { jobs: ['id1','id2',...] }" });
   }
 
-  // Status terminais do Replicate incluem succeeded/failed/canceled/aborted. [1](https://www.mpegflow.com/recipes/concatenate-video-files)
+  // Status do ciclo de vida: starting, processing, succeeded, failed, canceled, aborted. [4](https://www.mpegflow.com/recipes/concatenate-video-files)
   const TERMINAL = new Set(["succeeded", "failed", "canceled", "aborted"]);
 
   let allTerminal = true;
@@ -125,14 +169,20 @@ app.post("/status", async (req, res) => {
 
   for (const id of jobs) {
     const response = await fetch(`https://api.replicate.com/v1/predictions/${id}`, {
-      headers: { Authorization: `Token ${token}` },
+      headers: { Authorization: `Bearer ${token}` }, // [1](https://replicate.com/docs/reference/http)
     });
 
     const prediction = await response.json().catch(() => ({}));
+
     if (!response.ok) {
       allTerminal = false;
       anyFailed = true;
-      results.push({ id, status: "failed", error: prediction?.detail || `HTTP ${response.status}` });
+      results.push({
+        id,
+        status: "failed",
+        error: prediction?.detail || prediction?.error || `HTTP ${response.status}`,
+        raw: prediction,
+      });
       continue;
     }
 
@@ -147,12 +197,15 @@ app.post("/status", async (req, res) => {
       if (outUrl) outputs.push(outUrl);
     }
 
-    results.push({ id, status, output: outUrl, error: prediction.error ?? null });
+    results.push({
+      id,
+      status,
+      output: outUrl,
+      error: prediction.error ?? null,
+    });
   }
 
-  // done só quando tudo terminou E sem falha
   const done = allTerminal && !anyFailed;
-
   return res.json({ done, anyFailed, allTerminal, outputs, results });
 });
 
@@ -184,7 +237,7 @@ function runFFmpeg(args, cwd) {
   return new Promise((resolve, reject) => {
     const p = spawn("ffmpeg", args, { cwd });
     let stderr = "";
-    p.stderr.on("data", d => (stderr += d.toString()));
+    p.stderr.on("data", (d) => (stderr += d.toString()));
     p.on("close", (code) => {
       if (code === 0) resolve(stderr);
       else reject(new Error(`ffmpeg code=${code}\n${stderr}`));
@@ -205,7 +258,6 @@ app.post("/merge", async (req, res) => {
   fs.mkdirSync(clipsDir, { recursive: true });
 
   try {
-    // baixar clipes
     const localFiles = [];
     for (let i = 0; i < outputs.length; i++) {
       const url = String(outputs[i]).trim();
@@ -216,18 +268,19 @@ app.post("/merge", async (req, res) => {
       localFiles.push(localPath);
     }
 
-    // lista concat demuxer (mais rápido quando compatível) [2](https://replicate.com/docs/topics/predictions/lifecycle)
     const listPath = path.join(workdir, "list.txt");
-    fs.writeFileSync(listPath, localFiles.map(f => `file '${f.replace(/'/g, "'\\''")}'`).join("\n"), "utf8");
+    fs.writeFileSync(
+      listPath,
+      localFiles.map((f) => `file '${f.replace(/'/g, "'\\''")}'`).join("\n"),
+      "utf8"
+    );
 
     const outPath = path.join(workdir, "out.mp4");
 
-    // tenta sem re-encode
     let usedFallback = false;
     try {
       await runFFmpeg(["-y", "-f", "concat", "-safe", "0", "-i", listPath, "-c", "copy", outPath], workdir);
     } catch {
-      // fallback re-encode quando parâmetros diferem [3](https://sdks.replicate.com/resources/predictions/methods/create/)
       usedFallback = true;
 
       const inputArgs = [];
@@ -238,19 +291,30 @@ app.post("/merge", async (req, res) => {
       for (let i = 0; i < n; i++) parts.push(`[${i}:v]`, `[${i}:a]`);
       const filter = `${parts.join("")}concat=n=${n}:v=1:a=1[v][a]`;
 
-      await runFFmpeg([
-        "-y",
-        ...inputArgs,
-        "-filter_complex", filter,
-        "-map", "[v]",
-        "-map", "[a]",
-        "-c:v", "libx264",
-        "-preset", "veryfast",
-        "-crf", "22",
-        "-c:a", "aac",
-        "-b:a", "192k",
-        outPath
-      ], workdir);
+      await runFFmpeg(
+        [
+          "-y",
+          ...inputArgs,
+          "-filter_complex",
+          filter,
+          "-map",
+          "[v]",
+          "-map",
+          "[a]",
+          "-c:v",
+          "libx264",
+          "-preset",
+          "veryfast",
+          "-crf",
+          "22",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "192k",
+          outPath,
+        ],
+        workdir
+      );
     }
 
     res.setHeader("Content-Type", "video/mp4");
@@ -259,12 +323,15 @@ app.post("/merge", async (req, res) => {
 
     const stream = fs.createReadStream(outPath);
     stream.on("close", () => {
-      try { fs.rmSync(workdir, { recursive: true, force: true }); } catch {}
+      try {
+        fs.rmSync(workdir, { recursive: true, force: true });
+      } catch {}
     });
     stream.pipe(res);
-
   } catch (e) {
-    try { fs.rmSync(workdir, { recursive: true, force: true }); } catch {}
+    try {
+      fs.rmSync(workdir, { recursive: true, force: true });
+    } catch {}
     res.status(500).json({ error: e?.message || "Erro no merge." });
   }
 });
