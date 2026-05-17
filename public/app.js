@@ -1,14 +1,8 @@
-// ============================
-// CONFIGURAÇÃO DE ENDPOINTS
-// ============================
-// 1) generate/status: ficam no MESMO site onde o HTML está rodando (rotas relativas)
-// 2) merge: fica no Railway (FFmpeg)
 const ENDPOINTS = {
   generate: "/generate",
   status: "/status",
-  merge: "https://video-2-production.up.railway.app/merge",
+  merge: "/merge"
 };
-
 // ============================
 // CONFIGS
 // ============================
